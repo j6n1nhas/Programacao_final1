@@ -1,0 +1,15 @@
+ESTRUTURAS DE DADOS EM FICHEIROS:
+
+ALUNOS:
+numero (int)    \t  nome (string)   \t  curso (string) \n
+disciplina 1 (string)   \t  nota (float)\n
+disciplina 2 (string)   \t  nota (float)\n
+...
+disciplina n (string)   \t  nota (float) \n
+
+CURSOS:
+nome (string) \n
+disciplina 1 (string) \n
+disciplina 2 (string) \n
+...
+disciplina n (string) \n
