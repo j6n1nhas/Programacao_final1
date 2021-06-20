@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 typedef struct
 {
     char nome[50];
@@ -29,6 +28,7 @@ int menu_consultas();
 int menu_notas();
 int mostra_cursos();
 int mostra_alunos();
+int modificar_curso();
 int save_curso(Curso);
 int find_aluno(Aluno);
 int find_curso(Curso);
@@ -127,7 +127,9 @@ int menu_cursos()
             save_curso(curso);
             break;
         case 2:
-            break;
+            if(!modificar_curso())
+                return 0;
+            return 1;
         case 3:
             total_cursos = mostra_cursos();
             printf("Qual o curso que pretende eliminar? ");
@@ -184,6 +186,84 @@ int menu_cursos()
         case 0:
             return 1;
     }
+}
+
+int modificar_curso()
+{
+    int total_cursos, num_curso, index;
+    Curso curso, novo_curso;
+    Aluno aluno;
+    FILE *fcursos, *falunos;
+    puts("\nMODIFICAR CURSO");
+    total_cursos = mostra_cursos();
+    printf("Qual o numero de curso que pretende modificar: ");
+    scanf("%d", &num_curso);
+    getchar();
+    if(num_curso<1 || num_curso>total_cursos)
+    {
+        puts("CURSO INEXISTENTE");
+        return 0;
+    }
+    fcursos = fopen("cursos.bin", "r+b");
+    if(fcursos==NULL)
+    {
+        puts("ERRO NA ABERTURA DO FICHEIRO DE CURSOS");
+        return 0;
+    }
+    while(fread(&curso, sizeof(curso), 1, fcursos))
+    {
+        index++;
+        if(index!=num_curso)
+            continue;
+        break;
+    }
+    fseek(fcursos, -sizeof(curso), SEEK_CUR); // Posicionamo-nos no início do registo que vamos alterar
+    printf("CURSO: %s\n", curso.nome);
+    printf("NOVO NOME DE CURSO (ENTER PARA MANTER): ");
+    gets(novo_curso.nome);
+    for(index=0; index<5; index++)
+    {
+        printf("DISCIPLINA %d: %s\n", index+1, curso.cadeira[index].nome);
+        printf("NOVO NOME DE DISCIPLINA (ENTER PARA MANTER): ");
+        gets(novo_curso.cadeira[index].nome);
+    }
+    // Agora aqui vamos ao ficheiro de alunos à procura de alunos matriculados neste curso para alterarmos os nomes também no ficheiro alunos.bin
+    falunos = fopen("alunos.bin", "r+b");
+    if(falunos==NULL)
+    {
+        fclose(fcursos);
+        puts("ERRO AO ABRIR O FICHEIRO DE ALUNOS");
+        return 0;
+    }
+    while(fread(&aluno, sizeof(aluno), 1, falunos))
+    {   // Se o aluno está matriculado neste curso
+        if(!strcmp(curso.nome, aluno.curso.nome))
+        {   // Se o curso mudou de nome, atualizamos o nome do curso no aluno
+            if(strcmp(novo_curso.nome, "\0"))
+                strcpy(aluno.curso.nome, novo_curso.nome);
+            for(index=0; index<5; index++)
+            {   // Se o nome da disciplina não foi alterada, passamos à próxima
+                if(!strcmp(novo_curso.cadeira[index].nome, "\0"))
+                    continue;
+                strcpy(aluno.curso.cadeira[index].nome, novo_curso.cadeira[index].nome);
+            }
+            fseek(falunos, -(sizeof(aluno)), SEEK_CUR);
+            fwrite(&aluno, sizeof(aluno), 1, falunos);
+        }
+        else
+            continue;
+    }
+    fclose(falunos);
+    if(strcmp(novo_curso.nome, "\0"))
+        strcpy(curso.nome, novo_curso.nome);
+    for(index=0; index<5; index++)
+    {
+        if(strcmp(novo_curso.cadeira[index].nome, "\0"))
+            strcpy(curso.cadeira[index].nome, novo_curso.cadeira[index].nome);
+    }
+    fwrite(&curso, sizeof(curso), 1, fcursos);
+    fclose(fcursos);
+    return 1;
 }
 
 int menu_alunos()
@@ -377,23 +457,23 @@ int menu_notas()
 
 int mostra_cursos()
 {
-    int num=1, index;
+    int num=0, index;
     Curso curso;
     FILE *fcursos;
     fcursos = fopen("cursos.bin", "rb");
     if(fcursos==NULL)
     {
-        printf("\nErro:\nNão é possível abrir o ficheiro \"cursos.bin\"\n");
+        printf("\nERRO A ABRIR O FICHEIRO \"cursos.bin\"\n");
         return 0;
     }
     puts("\nLISTA DE CURSOS EXISTENTES");
     while(fread(&curso, sizeof(curso), 1, fcursos))
     {
+        num++;
         printf("%d - %s\t\tDisciplinas:\t", num, curso.nome);
         for(index=0; index<5; index++)
             printf("%s\t", curso.cadeira[index].nome);
         puts("");
-        num++;
     }
     puts("\n");
     fclose(fcursos);
