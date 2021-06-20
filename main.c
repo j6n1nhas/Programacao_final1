@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <locale.h>
 
 typedef struct
 {
@@ -23,20 +24,26 @@ typedef struct
 
 int main_menu();
 int menu_cursos();
+int criar_curso();
+int modificar_curso();
+int eliminar_curso();
 int menu_alunos();
+int criar_aluno();
+int modificar_aluno();
+int eliminar_aluno();
 int menu_consultas();
 int menu_notas();
 int mostra_cursos();
 int mostra_alunos();
-int modificar_curso();
 int save_curso(Curso);
 int find_aluno(Aluno);
 int find_curso(Curso);
 int inscrever_aluno(Aluno*);
 
-void main(int argc, char* argv[])
+int main(int argc, char* argv[])
 {
     int op;
+    setlocale(LC_ALL, "pt_PT.UTF-8");
     do
     {
         op = main_menu();
@@ -67,6 +74,7 @@ void main(int argc, char* argv[])
 int main_menu()
 {
     int op;
+    printf("%s\t%s\n", __TIME__, __DATE__);
     puts("SISTEMA DE REGISTO ACADÉMICO ISLA\n");
     puts("1 - GERIR CURSOS");
     puts("2 - GERIR ALUNOS");
@@ -80,10 +88,7 @@ int main_menu()
 //MENU DE CURSOS
 int menu_cursos()
 {
-    int op, index, var, total_cursos;
-    FILE *fin, *fout;
-    Curso curso, aux_curso;
-    Aluno aluno;
+    int op;
     do
     {
         puts("SISTEMA DE REGISTO ACADÉMICO ISLA\n");
@@ -93,99 +98,57 @@ int menu_cursos()
         puts("3 - ELIMINAR CURSO");
         puts("0 - VOLTAR");
         scanf("%d", &op);
+        getchar();
         if(op>3 || op<0)
             puts("OPÇÃO INVÁLIDA");
     } while(op<0 || op>3);
     switch(op)
     {
         case 1:
-            getchar();
-            printf("Qual o nome do curso que quer criar: ");
-            gets(curso.nome);
-            // Verificar se o curso já existe com esse nome
-            fin = fopen("cursos.bin", "a+b");
-            if(fin == NULL)
+            if(!criar_curso())
             {
-                puts("\nErro:\nImpossível abrir ficheiro de cursos");
+                puts("NAO FOI POSSIVEL CRIAR CURSO COM SUCESSO");
                 return 0;
             }
-            rewind(fin);
-            while(fread(&aux_curso, sizeof(aux_curso), 1, fin))
-            {
-                if(!strcmp(aux_curso.nome, curso.nome))
-                {
-                    printf("\nO curso %s já existe em sistema\n", curso.nome);
-                    return 0;
-                }
-            }
-            fclose(fin);
-            for(index=0; index<5; index++)
-            {
-                printf("Qual o nome da %da disciplina: ", index+1);
-                gets(curso.cadeira[index].nome);
-            }
-            save_curso(curso);
-            break;
+            return 1;
         case 2:
             if(!modificar_curso())
+            {
+                puts("NAO FOI POSSIVEL EDITAR CURSO COM SUCESSO");
                 return 0;
+            }
             return 1;
         case 3:
-            total_cursos = mostra_cursos();
-            printf("Qual o curso que pretende eliminar? ");
-            scanf("%d", &var);
-            if(var<1 && var>total_cursos)
+            if(!eliminar_curso())
             {
-                puts("\nCurso não existente");
+                puts("NÃO FOI POSSIVEL ELIMINAR CURSO COM SUCESSO");
                 return 0;
             }
-            // Verificar se existem alunos matriculados ao curso que se pretende eliminar para impedir de apagar cursos frequentados (até ao próximo fecho dos ficheiros fin1 e fin2)
-            fin = fopen("alunos.bin", "rb");
-            fout = fopen("cursos.bin", "r+b");
-            if(fout == NULL)
-            {
-                puts("\nErro:\nNão foi possível abrir o ficheiro de cursos");
-                return 0;
-            }
-            index = 1;
-            while(fread(&curso, sizeof(curso), 1, fout))
-            {
-                if(index == var)
-                    break;
-            }
-            if(fin == NULL)
-            {
-                puts("\nErro:\nNão foi possível abrir o ficheiro de alunos");
-                return 0;
-            }
-            while(fread(&aluno, sizeof(aluno), 1, fin))
-            {
-                if(!strcmp(aluno.curso.nome, curso.nome))
-                {
-                    printf("Não é possível eliminar o curso %s porque existe pelo menos um aluno matriculado\n", curso.nome);
-                    return 0;
-                }
-            }
-            fclose(fin);
-            fclose(fout);
-            fin = fopen("cursos.bin", "rb");
-            fout = fopen("temp1.bin", "wb");
-            index = 1;
-            while(fread(&curso, sizeof(curso), 1, fin))
-            {
-                if(index != var)
-                    fwrite(&curso, sizeof(curso), 1, fout);
-                index++;
-            }
-            fclose(fin);
-            fclose(fout);
-            remove("cursos.bin");
-            rename("temp1.bin", "cursos.bin");
-            puts("CURSO ELIMINADO");
-            return op;
+            return 1;
         case 0:
             return 1;
     }
+}
+
+int criar_curso()
+{
+    Curso curso;
+    FILE *fcursos;
+    int index;
+    printf("Qual o nome do curso que quer criar: ");
+    gets(curso.nome);
+    // Verificar se o curso já existe com esse nome
+    if(!find_curso(curso))
+    {
+        for(index=0; index<5; index++)
+        {
+            printf("Qual o nome da %da disciplina: ", index+1);
+            gets(curso.cadeira[index].nome);
+        }
+        save_curso(curso);
+        return 1;
+    }
+    return 0;
 }
 
 int modificar_curso()
@@ -196,6 +159,8 @@ int modificar_curso()
     FILE *fcursos, *falunos;
     puts("\nMODIFICAR CURSO");
     total_cursos = mostra_cursos();
+    if(!total_cursos)
+        return 0;
     printf("Qual o numero de curso que pretende modificar: ");
     scanf("%d", &num_curso);
     getchar();
@@ -217,7 +182,7 @@ int modificar_curso()
             continue;
         break;
     }
-    fseek(fcursos, -sizeof(curso), SEEK_CUR); // Posicionamo-nos no início do registo que vamos alterar
+    fseek(fcursos, -(sizeof(curso)), SEEK_CUR); // Posicionamo-nos no início do registo que vamos alterar
     printf("CURSO: %s\n", curso.nome);
     printf("NOVO NOME DE CURSO (ENTER PARA MANTER): ");
     gets(novo_curso.nome);
@@ -254,23 +219,87 @@ int modificar_curso()
             continue;
     }
     fclose(falunos);
+    // Se o nome de curso foi alterado, temos de o atualizar
     if(strcmp(novo_curso.nome, "\0"))
         strcpy(curso.nome, novo_curso.nome);
     for(index=0; index<5; index++)
-    {
+    {   // O mesmo para as disciplinas
         if(strcmp(novo_curso.cadeira[index].nome, "\0"))
             strcpy(curso.cadeira[index].nome, novo_curso.cadeira[index].nome);
     }
+    // Gravar e fechar o ficheiro
     fwrite(&curso, sizeof(curso), 1, fcursos);
     fclose(fcursos);
     return 1;
 }
 
+int eliminar_curso()
+{
+    int num_curso, index, total_cursos = mostra_cursos();
+    FILE *fin, *fout;
+    Curso curso;
+    Aluno aluno;
+    if(!total_cursos)
+        return 0;
+    printf("Qual o curso que pretende eliminar? ");
+    scanf("%d", &num_curso);
+    if(num_curso<1 || num_curso>total_cursos)
+    {
+        puts("\nCurso não existente");
+        return 0;
+    }
+    // Verificar se existem alunos matriculados ao curso que se pretende eliminar para impedir de apagar cursos frequentados (até ao próximo fecho dos ficheiros fin1 e fin2)
+    fin = fopen("alunos.bin", "rb");
+    fout = fopen("cursos.bin", "r+b");
+    if(fout == NULL)
+    {
+        puts("\nErro:\nNão foi possível abrir o ficheiro de cursos");
+        return 0;
+    }
+    index = 1;
+    while(fread(&curso, sizeof(curso), 1, fout))
+    {
+        if(index == num_curso)
+            break;
+    }
+    if(fin == NULL)
+    {
+        puts("\nErro:\nNão foi possível abrir o ficheiro de alunos");
+        return 0;
+    }
+    while(fread(&aluno, sizeof(aluno), 1, fin))
+    {
+        if(!strcmp(aluno.curso.nome, curso.nome))
+        {
+            printf("Não é possível eliminar o curso %s porque existe pelo menos um aluno matriculado\n", curso.nome);
+            return 0;
+        }
+    }
+    fclose(fin);
+    fclose(fout);
+    fin = fopen("cursos.bin", "rb");
+    fout = fopen("temp1.bin", "wb");
+    index = 1;
+    while(fread(&curso, sizeof(curso), 1, fin))
+    {
+        if(index != num_curso)
+            fwrite(&curso, sizeof(curso), 1, fout);
+        index++;
+    }
+    fclose(fin);
+    fclose(fout);
+    remove("cursos.bin");
+    rename("temp1.bin", "cursos.bin");
+    puts("CURSO ELIMINADO");
+    return 1;
+}
+
+//MENU ALUNOS
 int menu_alunos()
 {
-    int op, index, found, num=1;
-    char c, carater;
+    int op, total_alunos, num_aluno;
     Aluno aluno_novo;
+    char c;
     FILE *falunos;
     do
     {
@@ -288,88 +317,212 @@ int menu_alunos()
     switch (op)
     {
     case 1:
-        printf("Qual o número do aluno: ");
-        scanf("%d", &aluno_novo.numero);
-        printf("Qual o nome do aluno: ");
-        scanf(" %s", aluno_novo.nome);
-        // Verificação de aluno existente em registo, ou com o mesmo número ou mesmo nome
-        if(find_aluno(aluno_novo) == 1) // Função find_aluno devolve 1 se aluno já existe e 0 senão
-            return 0;
-        printf("Pretende inscrever já o aluno num curso? (s/n): ");
-        scanf(" %c", &c);
-        if(c=='s')
+        if(!criar_aluno())
         {
-            if(inscrever_aluno(&aluno_novo) == 0)
+            puts("NAO FOI POSSIVEL CRIAR ALUNO COM SUCESSO");
+            return 0;
+        }
+        return 1;
+    case 2:
+        if(!modificar_aluno())
+        {
+            puts("NAO FOI POSSIVEL EDITAR ALUNO COM SUCESSO");
+            return 0;
+        }
+        return 1;
+    case 3:
+        if(!eliminar_aluno())
+        {
+            puts("NAO FOI POSSIVEL ELIMINAR ALUNO COM SUCESSO");
+            return 0;
+        }
+        return 1;
+    case 4:
+        total_alunos = mostra_alunos();
+        printf("Aluno numero a matricular: ");
+        scanf("%d", &num_aluno);
+        if(num_aluno<1 || num_aluno>total_alunos)
+        {
+            puts("ALUNO NAO EXISTENTE");
+            return 0;
+        }
+        falunos = fopen("alunos.bin", "r+b");
+        if(falunos == NULL)
+        {
+            puts("ERRO A ABRIR O FICHEIRO DE ALUNOS");
+            return 0;
+        }
+        fseek(falunos, sizeof(aluno_novo)*(num_aluno-1), SEEK_SET);
+        fread(&aluno_novo, sizeof(aluno_novo), 1, falunos);
+        // Se o aluno já estiver inscrito num curso, perguntar se quer alterar o curso neste aluno
+        if(strlen(aluno_novo.curso.nome))
+        {
+            printf("O ALUNO %s JA ESTA INSCRITO NO CURSO %s. PRETENDE MATRICULAR O ALUNO NOUTRO CURSO? (s/n): ", aluno_novo.nome, aluno_novo.curso.nome);
+            scanf(" %c", &c);
+            if(c=='n')
             {
-                puts("\nErro:\nProcessamento de aluno invalido");
+                puts("OPERACAO ABORTADA");
                 return 0;
             }
         }
-        puts("\nEstrutura do aluno:\n");
+        if(inscrever_aluno(&aluno_novo))
+        {
+            fseek(falunos, -(sizeof(aluno_novo)), SEEK_CUR);
+            fwrite(&aluno_novo, sizeof(aluno_novo), 1, falunos);
+            fclose(falunos);
+            puts("ALUNO MATRICULADO COM SUCESSO");
+            return 1;
+        }
+        return 0;
+    }
+}
+
+int criar_aluno()
+{
+    Aluno aluno_novo;
+    char c;
+    int index;
+    FILE *falunos;
+    printf("Qual o número do aluno: ");
+    scanf("%d", &aluno_novo.numero);
+    getchar();
+    printf("Qual o nome do aluno: ");
+    gets(aluno_novo.nome);
+    // Verificação de aluno existente em registo, ou com o mesmo número ou mesmo nome
+    if(find_aluno(aluno_novo) == 1) // Função find_aluno devolve 1 se aluno já existe e 0 senão
+    {
+        printf("JA EXISTE UM ALUNO COM O NUMERO %d OU NOME %s\n", aluno_novo.numero, aluno_novo.nome);
+        return 0;
+    }
+    printf("Pretende inscrever já o aluno num curso? (s/n): ");
+    scanf(" %c", &c);
+    if(c=='s')
+    {
+        if(inscrever_aluno(&aluno_novo) == 0)
+        {
+            puts("\nErro:\nProcessamento de aluno invalido");
+            return 0;
+        }
+        puts("\nEstrutura do aluno:");
         printf("Numero: %d\tNome: %s\tCurso: %s\n", aluno_novo.numero, aluno_novo.nome, aluno_novo.curso.nome);
         printf("Disciplinas:\n");
         for(index=0; index<5; index++)
             printf("%s\n", aluno_novo.curso.cadeira[index].nome);
-        puts("");
-        printf("CONFIRMA DADOS PARA GRAVAR? (s/n): ");
-        scanf(" %c", &carater);
-        if(carater=='n')
-        {
-            puts("DADOS PERDIDOS");
-            return 0;
-        }
-        falunos = fopen("alunos.bin", "a+b");
-        if(falunos==NULL)
-        {
-            printf("NAO FOI POSSIVEL ABRIR O FICHEIRO \"alunos.bin\"\n");
-            return 0;
-        }
-        fwrite(&aluno_novo, sizeof(aluno_novo), 1, falunos);
-        fclose(falunos);
-        return 1;
-    case 2:
-        break;
-    case 3:
-        break;
-    case 4:
-        break;
-    default:
-        break;
     }
+    else
+    {
+        strcpy(aluno_novo.curso.nome, "\0");
+        for(index=0; index<5; index++)
+        {
+            strcpy(aluno_novo.curso.cadeira[index].nome, "\0");
+            aluno_novo.curso.cadeira->nota = 0.0;
+        }
+        puts("\nEstrutura do aluno:");
+        printf("Numero: %d\tNome: %s\n", aluno_novo.numero, aluno_novo.nome);
+    }
+    puts("");
+    printf("CONFIRMA DADOS PARA GRAVAR? (s/n): ");
+    scanf(" %c", &c);
+    if(c=='n')
+    {
+        puts("DADOS PERDIDOS");
+        return 0;
+    }
+    falunos = fopen("alunos.bin", "a+b");
+    if(falunos==NULL)
+    {
+        printf("NAO FOI POSSIVEL ABRIR O FICHEIRO \"alunos.bin\"\n");
+        return 0;
+    }
+    fwrite(&aluno_novo, sizeof(aluno_novo), 1, falunos);
+    fclose(falunos);
+    return 1;
+}
+
+int modificar_aluno()
+{}
+
+int eliminar_aluno()
+{
+    int num_aluno, index, total_alunos = mostra_alunos();
+    FILE *ficheiro1, *ficheiro2;
+    Aluno aluno_remover;
+    char c='s';
+    ficheiro1 = fopen("alunos.bin", "rb");
+    ficheiro2 = fopen("temp.bin", "wb");
+    if(!total_alunos)
+        return 0;
+    if(ficheiro1 == NULL)
+    {
+        puts("\nErro:\nNão foi possível abrir o ficheiro de alunos");
+        return 0;
+    }
+    printf("Qual o aluno a apagar: ");
+    scanf("%d", &num_aluno);
+    if(num_aluno<1 || num_aluno>total_alunos)
+    {
+        puts("ALUNO INEXISTENTE");
+        return 0;
+    }
+    index = 0;
+    while(fread(&aluno_remover, sizeof(aluno_remover), 1, ficheiro1))
+    {
+        index++;
+        //apenas escreve no ficheiro temporario, os alunos que sao diferentes do id inserido
+        //na pratica é uma remoçao do id que o user deu
+        if(index != num_aluno)
+            fwrite(&aluno_remover, sizeof(aluno_remover), 1, ficheiro2);
+        else
+        {
+            if(strlen(aluno_remover.curso.nome))
+            {
+                printf("O ALUNO %s ESTA MATRICULADO NO CURSO %s. PRENTENDE ELIMINAR TODOS OS DADOS REFERENTES A ESTE ALUNO (s/n)? ", aluno_remover.nome, aluno_remover.curso.nome);
+                scanf(" %c", &c);
+                if(c=='s')
+                    continue;
+                fwrite(&aluno_remover, sizeof(aluno_remover), 1, ficheiro2);
+            }
+        }        
+    }
+    fclose(ficheiro1);
+    fclose(ficheiro2);
+    //remove o ficheiro antigo de alunos
+    remove("alunos.bin");
+    // Muda o nome do ficheiro para alunos.bin
+    rename("temp.bin", "alunos.bin");
+    if(c=='s')
+    {
+        puts("ALUNO ELIMINADO");
+        return 1;
+    }
+    return 0;
 }
 
 int inscrever_aluno(Aluno* aluno)
 {
     FILE *fcursos;
-    int num, index;
+    int num, index, num_curso;
     Curso current_curso;
     fcursos = fopen("cursos.bin", "rb");
     if(fcursos==NULL)
     {
-        puts("\nNAO EXISTE FICHEIRO DE REGISTO DE CURSOS");
+        puts("\nERRO A ABRIR O FICHEIRO DE CURSOS");
         return 0;
     }
-    puts("\nCURSOS DISPONIVEIS:");
-    num = 1;
-    while(fread(&current_curso, sizeof(current_curso), 1, fcursos))
-    {
-        printf("%d - %s\t\tDisciplinas: ", num, current_curso.nome);
-        for(index=0; index<5; index++)
-        {
-            printf("%s\t", current_curso.cadeira[index].nome);
-        }
-        printf("\n");
-        num++;
-    }
+    num = mostra_cursos();
     printf("\nQual o num de curso que pretende matricular: ");
-    scanf("%d", &num);
+    scanf("%d", &num_curso);
     // TODO: Fazer aqui a validação do número do curso introduzido
-    rewind(fcursos);
+    if(num_curso<1 || num_curso>num)
+    {
+        puts("CURSO INEXISTENTE");
+        return 0;
+    }
     index = 0; //Variável de controlo para iterar sobre cursos no ficheiro
     while(fread(&current_curso, sizeof(current_curso), 1, fcursos))
     {
         index++;
-        if(index == num)
+        if(index == num_curso)
         {
             strcpy(aluno->curso.nome, current_curso.nome);
             for(index=0; index<5; index++)
@@ -412,47 +565,66 @@ int menu_consultas()
 
 }
 
+//MENU DE LANÇAMENTO DE NOTAS
 int menu_notas()
 {
     Aluno aluno;
     FILE *falunos;
-    falunos = fopen("alunos.bin", "r+");
-    int num_aluno, found=0;
+    falunos = fopen("alunos.bin", "r+b");
+    int num_aluno, index1, index2, found;
     if(falunos == NULL)
     {
         puts("\nErro:\nNão foi possível abrir o ficheiro de alunos");
         return 0;
     }
     puts("\nLANÇAMENTO DE NOTAS");
-    puts("\nALUNOS REGISTADOS:");
+    puts("ALUNOS MATRICULADOS:");
+    index1 = 0; // index1 vai dar o número de alunos matriculados
     while(fread(&aluno, sizeof(aluno), 1, falunos))
-        printf("Numero: %d\tNome: %s\n", aluno.numero, aluno.nome);
+    {   // Só mostra os alunos matriculados verificando se o nome do curso do aluno não está vazio
+        if(strlen(aluno.curso.nome))
+        {
+            index1++;
+            printf("%d - %s\n", index1, aluno.nome);
+        }
+    }
+    if(index1 < 1)
+    {
+        puts("NAO HA ALUNOS MATRICULADOS");
+        return 0;
+    }
     printf("Qual o número de aluno que quer lançar notas: ");
     scanf("%d", &num_aluno);
+    if(num_aluno<1 || num_aluno > index1)
+    {
+        puts("ALUNO INEXISTENTE");
+        return 0;
+    }
     rewind(falunos);
+    index2 = 0;
     while(fread(&aluno, sizeof(aluno), 1, falunos))
     {
-        if(num_aluno == aluno.numero)
+        index2++;
+        if(index2==index1)
         {
             found = 1;
             break;
         }
     }
-    if(found == 0)
+    if(found==1)
     {
-        printf("O número de aluno %d não se encontra no ficheiro de registo\n", num_aluno);
-        return 0;
+        printf("ALUNO:\nNum: %d\tNome: %s\n", aluno.numero, aluno.nome);
+        for(index1=0; index1<5; index1++)
+        {
+            printf("\nDisciplina: %s\tNota: %.2f\t\tNova nota: ", aluno.curso.cadeira[index1].nome, aluno.curso.cadeira[index1].nota);
+            scanf("%f", &aluno.curso.cadeira[index1].nota);
+        }
+        fseek(falunos, -(sizeof(aluno)), SEEK_CUR);
+        fwrite(&aluno, sizeof(aluno), 1, falunos);
+        fclose(falunos);
+        return 1;
     }
-    printf("ALUNO:\nNum: %d\tNome: %s\n", aluno.numero, aluno.nome);
-    for(found=0; found<5; found++)
-    {
-        printf("\nDisciplina: %s\tNota: %.2f\t\tNova nota: ", aluno.curso.cadeira[found].nome, aluno.curso.cadeira[found].nota);
-        scanf("%f", &aluno.curso.cadeira[found].nota);
-    }
-    fseek(falunos, sizeof(aluno), 1);
-    fwrite(&aluno, sizeof(aluno), 1, falunos);
-    fclose(falunos);
-    return 1;
+    return 0;
 }
 
 int mostra_cursos()
@@ -484,7 +656,7 @@ int mostra_alunos()
 {
     FILE *falunos;
     Aluno aluno;
-    int index;
+    int index, num=0;
     falunos = fopen("alunos.bin", "rb");
     if(falunos==NULL)
     {
@@ -494,13 +666,17 @@ int mostra_alunos()
     puts("ALUNOS EM FICHEIRO:");
     while(fread(&aluno, sizeof(aluno), 1, falunos))
     {
+        num++;
+        printf("\nALUNO %d:\n", num);
         printf("Nome: %s\tNum: %d\t Curso: %s\n", aluno.nome, aluno.numero, aluno.curso.nome);
-        printf("Disciplinas:\n");
+        printf("Disciplina\tNota\n");
         for(index=0; index<5; index++)
             printf("%s\t%.2f\n", aluno.curso.cadeira[index].nome, aluno.curso.cadeira[index].nota);
         printf("\n");
     }
-    return 1;
+    if(num==0)
+        puts("NAO HA ALUNOS GUARDADOS");
+    return num;
 }
 
 // Função para procurar existência de aluno em ficheiro. Se já existir aluno x com número y a função devolve 1, caso contrário devolve 0
@@ -514,15 +690,14 @@ int find_aluno(Aluno aluno)
         puts("Erro:\nNão é possível abrir o ficheiro de alunos");
         return 0;
     }
-    while(fread(&search_aluno, sizeof(search_aluno), 1, falunos) == 1)
+    while(fread(&search_aluno, sizeof(search_aluno), 1, falunos))
     {
         if(search_aluno.numero == aluno.numero || !strcmp(aluno.nome, search_aluno.nome))
         {
-            printf("Já existe um aluno com o nome %s ou numero %d em ficheiro\n", aluno.nome, aluno.numero);
+            fclose(falunos);
             return 1;
         }
     }
-    printf("Não foi encontrado o aluno %s com o número %d\nPode prosseguir\n", aluno.nome, aluno.numero);
     return 0;
 }
 
@@ -532,15 +707,19 @@ int find_curso(Curso curso)
     FILE *fcursos;
     Curso search_curso;
     fcursos = fopen("cursos.bin", "rb");
+    if(fcursos == NULL)
+    {
+        puts("Não é possível abrir o ficheiro de cursos");
+        return 0;
+    }
     while(fread(&search_curso, sizeof(search_curso), 1, fcursos))
     {
         if(!strcmp(search_curso.nome, curso.nome))
         {
-            printf("O curso %s já existe em ficheiro\n", curso.nome);
+            fclose(fcursos);
             return 1;
         }
     }
-    printf("O curso %s ainda não está registado\n", curso.nome);
     return 0;
 }
 
