@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <locale.h>
+#include <sqlite3.h>
+
+#define CADEIRAS 5
 
 typedef struct
 {
@@ -11,7 +14,7 @@ typedef struct
 
 typedef struct
 {
-    Disciplina cadeira[5];
+    Disciplina cadeira[CADEIRAS];
     char nome[50];
 } Curso;
 
@@ -38,7 +41,9 @@ int mostra_alunos();
 int save_curso(Curso);
 int find_aluno(Aluno);
 int find_curso(Curso);
-int inscrever_aluno(Aluno*);
+int matricular_aluno(Aluno*);
+int desmatricular_aluno();
+
 
 int main(int argc, char* argv[])
 {
@@ -140,7 +145,7 @@ int criar_curso()
     // Verificar se o curso já existe com esse nome
     if(!find_curso(curso))
     {
-        for(index=0; index<5; index++)
+        for(index=0; index<CADEIRAS; index++)
         {
             printf("Qual o nome da %da disciplina: ", index+1);
             gets(curso.cadeira[index].nome);
@@ -186,7 +191,7 @@ int modificar_curso()
     printf("CURSO: %s\n", curso.nome);
     printf("NOVO NOME DE CURSO (ENTER PARA MANTER): ");
     gets(novo_curso.nome);
-    for(index=0; index<5; index++)
+    for(index=0; index<CADEIRAS; index++)
     {
         printf("DISCIPLINA %d: %s\n", index+1, curso.cadeira[index].nome);
         printf("NOVO NOME DE DISCIPLINA (ENTER PARA MANTER): ");
@@ -206,7 +211,7 @@ int modificar_curso()
         {   // Se o curso mudou de nome, atualizamos o nome do curso no aluno
             if(strcmp(novo_curso.nome, "\0"))
                 strcpy(aluno.curso.nome, novo_curso.nome);
-            for(index=0; index<5; index++)
+            for(index=0; index<CADEIRAS; index++)
             {   // Se o nome da disciplina não foi alterada, passamos à próxima
                 if(!strcmp(novo_curso.cadeira[index].nome, "\0"))
                     continue;
@@ -222,7 +227,7 @@ int modificar_curso()
     // Se o nome de curso foi alterado, temos de o atualizar
     if(strcmp(novo_curso.nome, "\0"))
         strcpy(curso.nome, novo_curso.nome);
-    for(index=0; index<5; index++)
+    for(index=0; index<CADEIRAS; index++)
     {   // O mesmo para as disciplinas
         if(strcmp(novo_curso.cadeira[index].nome, "\0"))
             strcpy(curso.cadeira[index].nome, novo_curso.cadeira[index].nome);
@@ -308,7 +313,8 @@ int menu_alunos()
         puts("1 - CRIAR ALUNO");
         puts("2 - MODIFICAR ALUNO");
         puts("3 - ELIMINAR ALUNO");
-        puts("4 - INSCREVER ALUNO");
+        puts("4 - MATRICULAR ALUNO");
+        puts("5 - DESMATRICULAR ALUNO");
         puts("0 - VOLTAR");
         scanf("%d", &op);
         if(op>3 && op<0)
@@ -365,7 +371,7 @@ int menu_alunos()
                 return 0;
             }
         }
-        if(inscrever_aluno(&aluno_novo))
+        if(matricular_aluno(&aluno_novo))
         {
             fseek(falunos, -(sizeof(aluno_novo)), SEEK_CUR);
             fwrite(&aluno_novo, sizeof(aluno_novo), 1, falunos);
@@ -374,6 +380,13 @@ int menu_alunos()
             return 1;
         }
         return 0;
+    case 5:
+        if(!desmatricular_aluno())
+        {
+            puts("NAO FOI POSSIVEL DESMATRICULAR ALUNO COM SUCESSO");
+            return 0;
+        }
+        return 1;
     }
 }
 
@@ -398,7 +411,7 @@ int criar_aluno()
     scanf(" %c", &c);
     if(c=='s')
     {
-        if(inscrever_aluno(&aluno_novo) == 0)
+        if(matricular_aluno(&aluno_novo) == 0)
         {
             puts("\nErro:\nProcessamento de aluno invalido");
             return 0;
@@ -406,13 +419,13 @@ int criar_aluno()
         puts("\nEstrutura do aluno:");
         printf("Numero: %d\tNome: %s\tCurso: %s\n", aluno_novo.numero, aluno_novo.nome, aluno_novo.curso.nome);
         printf("Disciplinas:\n");
-        for(index=0; index<5; index++)
+        for(index=0; index<CADEIRAS; index++)
             printf("%s\n", aluno_novo.curso.cadeira[index].nome);
     }
     else
     {
         strcpy(aluno_novo.curso.nome, "\0");
-        for(index=0; index<5; index++)
+        for(index=0; index<CADEIRAS; index++)
         {
             strcpy(aluno_novo.curso.cadeira[index].nome, "\0");
             aluno_novo.curso.cadeira->nota = 0.0;
@@ -440,7 +453,100 @@ int criar_aluno()
 }
 
 int modificar_aluno()
-{}
+{
+    int index, total_alunos, num_aluno;
+    Aluno aluno, novo_aluno;
+    FILE *falunos;
+    puts("\nMODIFICAR ALUNO");
+    total_alunos = mostra_alunos();
+    if(!total_alunos)
+    {
+        puts("NAO HA ALUNOS EM SISTEMA");
+        return 0;
+    }
+    printf("Qual o numero de aluno que pretende modificar: ");
+    scanf("%d", &num_aluno);
+    getchar();
+    if(num_aluno<1 || num_aluno>total_alunos)
+    {
+        puts("ALUNO INEXISTENTE");
+        return 0;
+    }
+    falunos = fopen("alunos.bin", "r+b");
+    if(falunos==NULL)
+    {
+        puts("ERRO NA ABERTURA DO FICHEIRO DE ALUNOS");
+        return 0;
+    }
+    //percorrer o ficheiro de alunos e parar no index do aluno que queremos
+    index = 0;
+    while(fread(&aluno, sizeof(aluno), 1, falunos))
+    {
+        index++;
+        if(index!=num_aluno)
+            continue;
+        break;
+    }
+    printf("ALUNO: %s\n", aluno.nome);
+    printf("NOVO NOME DE ALUNO (ENTER PARA MANTER): ");
+    gets(novo_aluno.nome);
+    printf("Numero de aluno: %d\n", aluno.numero);
+    printf("NOVO NUMERO DE ALUNO (ZERO PARA MANTER): ");
+    scanf("%d", &novo_aluno.numero);
+
+    // Se o nome de aluno foi alterado, temos de o atualizar
+    if(strcmp(novo_aluno.nome, "\0"))
+    {   // Vamos verificar se já existe algum aluno com o mesmo nome
+        rewind(falunos);
+        index = 0;
+        while(fread(&aluno, sizeof(aluno), 1, falunos))
+        {
+            index++;
+            if(index==num_aluno)
+                continue;
+            if(!strcmp(aluno.nome, novo_aluno.nome))
+            {
+                printf("Ja existe um aluno com o mesmo nome: \"%s\"\nOPERACAO ABORTADA\n", novo_aluno.nome);
+                fclose(falunos);
+                return 0;
+            }
+        }
+    }
+    // Se o numero de aluno foi alterado, temos de o atualizar
+    if(novo_aluno.numero != 0)
+    {   // Vamos verificar se já existe algum aluno com o mesmo número
+        rewind(falunos);
+        index = 0;
+        while(fread(&aluno, sizeof(aluno), 1, falunos))
+        {
+            index++;
+            if(index==num_aluno)
+                continue;
+            if(aluno.numero == novo_aluno.numero)
+            {
+                printf("Ja existe um aluno com o mesmo numero: %d\nOPERACAO ABORTADA\n", aluno.numero);
+                fclose(falunos);
+                return 0;
+            }
+        }
+    }
+    // Colocamo-nos no início da estrutura aluno a alterar
+    fseek(falunos, sizeof(aluno)*(num_aluno-1), SEEK_SET);
+    // Lemos os dados para a estrutura aluno
+    fread(&aluno, sizeof(aluno), 1, falunos);
+    // Fazemos as alterações
+    if(strcmp(novo_aluno.nome, "\0"))
+        strcpy(aluno.nome, novo_aluno.nome);
+    if(novo_aluno.numero != 0)
+        aluno.numero = novo_aluno.numero;
+    // Colocamo-nos novamente no início da estrutura
+    fseek(falunos, -(sizeof(aluno)), SEEK_CUR);
+    // Escrevemos os novos dados
+    fwrite(&aluno, sizeof(aluno), 1, falunos);
+    // Fechamos o ficheiro
+    fclose(falunos);
+    return 1;
+}
 
 int eliminar_aluno()
 {
@@ -498,7 +604,7 @@ int eliminar_aluno()
     return 0;
 }
 
-int inscrever_aluno(Aluno* aluno)
+int matricular_aluno(Aluno* aluno)
 {
     FILE *fcursos;
     int num, index, num_curso;
@@ -525,7 +631,7 @@ int inscrever_aluno(Aluno* aluno)
         if(index == num_curso)
         {
             strcpy(aluno->curso.nome, current_curso.nome);
-            for(index=0; index<5; index++)
+            for(index=0; index<CADEIRAS; index++)
             {
                 strcpy(aluno->curso.cadeira[index].nome, current_curso.cadeira[index].nome);
                 aluno->curso.cadeira[index].nota = 0.0;
@@ -536,6 +642,55 @@ int inscrever_aluno(Aluno* aluno)
     }
     fclose(fcursos);
     return 0;
+}
+
+int desmatricular_aluno()
+{
+    FILE *falunos;
+    int index, total_alunos, num_aluno;
+    Aluno aluno;
+    puts("\nDESMATRICULAR ALUNO\n");
+    total_alunos = mostra_alunos();
+    falunos = fopen("alunos.bin", "r+b");
+    if(falunos == NULL)
+    {
+        puts("ERRO AO ABRIR O FICHEIRO DE ALUNOS");
+        return 0;
+    }
+    if(total_alunos==0)
+        return 0;
+    printf("Qual o aluno numero que pretende desmatricular: ");
+    scanf("%d", &num_aluno);
+    if(num_aluno<0 || num_aluno>total_alunos)
+    {
+        puts("ALUNO INEXISTENTE");
+        return 0;
+    }
+    index = 0;
+    while(fread(&aluno, sizeof(aluno), 1, falunos))
+    {
+        index++;
+        if(index!=num_aluno)
+            continue;
+        if(!strlen(aluno.curso.nome))
+        {
+            printf("O ALUNO %s NAO SE ENCONTRA MATRICULADO A NENHUM CURSO\n", aluno.nome);
+            fclose(falunos);
+            return 0;
+        }
+        break;
+    }
+    fseek(falunos, -(sizeof(aluno)), SEEK_CUR);
+    strcpy(aluno.curso.nome, "");
+    for(index=0; index<CADEIRAS; index++)
+    {
+        strcpy(aluno.curso.cadeira[index].nome, "");
+        aluno.curso.cadeira[index].nota = 0.0;
+    }
+    fwrite(&aluno, sizeof(aluno), 1, falunos);
+    fclose(falunos);
+    puts("ALUNO DESMATRICULADO COM SUCESSO");
+    return 1;
 }
 
 int menu_consultas()
@@ -604,17 +759,20 @@ int menu_notas()
     index2 = 0;
     while(fread(&aluno, sizeof(aluno), 1, falunos))
     {
-        index2++;
-        if(index2==index1)
+        if(strlen(aluno.curso.nome))
         {
-            found = 1;
-            break;
+            index2++;
+            if(index1==index2)
+            {
+                found = 1;
+                break;
+            }
         }
     }
     if(found==1)
     {
         printf("ALUNO:\nNum: %d\tNome: %s\n", aluno.numero, aluno.nome);
-        for(index1=0; index1<5; index1++)
+        for(index1=0; index1<CADEIRAS; index1++)
         {
             printf("\nDisciplina: %s\tNota: %.2f\t\tNova nota: ", aluno.curso.cadeira[index1].nome, aluno.curso.cadeira[index1].nota);
             scanf("%f", &aluno.curso.cadeira[index1].nota);
@@ -643,7 +801,7 @@ int mostra_cursos()
     {
         num++;
         printf("%d - %s\t\tDisciplinas:\t", num, curso.nome);
-        for(index=0; index<5; index++)
+        for(index=0; index<CADEIRAS; index++)
             printf("%s\t", curso.cadeira[index].nome);
         puts("");
     }
@@ -663,14 +821,14 @@ int mostra_alunos()
         printf("Não foi possível abrir o ficheiro \"alunos.bin\"\n");
         return 0;
     }
-    puts("ALUNOS EM FICHEIRO:");
+    puts("ALUNOS EM SISTEMA:");
     while(fread(&aluno, sizeof(aluno), 1, falunos))
     {
         num++;
         printf("\nALUNO %d:\n", num);
         printf("Nome: %s\tNum: %d\t Curso: %s\n", aluno.nome, aluno.numero, aluno.curso.nome);
         printf("Disciplina\tNota\n");
-        for(index=0; index<5; index++)
+        for(index=0; index<CADEIRAS; index++)
             printf("%s\t%.2f\n", aluno.curso.cadeira[index].nome, aluno.curso.cadeira[index].nota);
         printf("\n");
     }
