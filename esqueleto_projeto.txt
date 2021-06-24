@@ -1,6 +1,0 @@
-ALUNO
-DISCIPLINA
-CURSO
-
-
-Um curso terá associado um grupo de disciplinas e os alunos estarão associados a um determinado curso.
